@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naomi's English Funland presents: Winnie the Pooh's Word Adventure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        body {
+            font-family: 'Comic Neue', cursive, sans-serif;
+            background-color: #FDF6E3; 
+            color: #4A3C31; 
+            margin: 0;
+            padding: 0;
+            background-image: radial-gradient(#FDE68A 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .pooh-theme {
+            --primary: #FFB347;
+            --secondary: #E34234; 
+            --accent: #8FBC8F; 
+            --bg-card: #FFF8DC; 
+        }
+
+        .grid-cell {
+            transition: all 0.2s ease-in-out;
+            user-select: none;
+        }
+
+        .grid-cell:hover {
+            transform: scale(1.1);
+            background-color: #FFE4B5; 
+        }
+
+        .grid-cell.selected {
+            background-color: var(--primary);
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(255, 179, 71, 0.8);
+        }
+
+        .grid-cell.found {
+            background-color: var(--accent);
+            color: white;
+            animation: popIn 0.3s ease-out;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .btn-pooh {
+            background-color: var(--primary);
+            color: #4A3C31;
+            border: 2px solid #D2691E;
+            box-shadow: 2px 4px 0 #D2691E;
+            transition: all 0.1s;
+            cursor: pointer;
+        }
+
+        .btn-pooh:active {
+            box-shadow: 0 0 0 #D2691E;
+            transform: translateY(4px);
+        }
+
+        .btn-pooh:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: 0 0 0 #D2691E;
+            transform: none;
+        }
+
+        .grammar-error {
+            text-decoration: underline wavy red;
+            background-color: rgba(255, 0, 0, 0.1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: var(--primary); 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #D2691E; 
+        }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'winnie-pooh-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        let app, db, auth;
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch (e) {
+            console.error("Firebase initialization failed:", e);
+        }
+
+        window.firebaseDb = db;
+        window.firebaseAuth = auth;
+        window.appId = appId;
+        window.signInAnonymously = signInAnonymously;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.getDocs = getDocs;
+        window.onSnapshot = onSnapshot;
+        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        const WORD_LIST = [
+            { word: "AMBITIOUS", definition: "Having or showing a strong desire and determination to succeed." },
+            { word: "ASPIRING", definition: "Directing one's hopes or ambitions toward becoming a specified type of person." },
+            { word: "AVID", definition: "Having or showing a keen interest in or enthusiasm for something." },
+            { word: "CREATIVITY", definition: "The use of the imagination or original ideas, especially in the production of an artistic work." },
+            { word: "DEPENDENT", definition: "Contingent on or determined by." },
+            { word: "DILIGENT", definition: "Having or showing care and conscientiousness in one's work or duties." },
+            { word: "KEEP YOUR NOSE TO THE GRINDSTONE", definition: "To work hard and continuously." },
+            { word: "OPTIMISTIC", definition: "Hopeful and confident about the future." },
+            { word: "SPIRIT", definition: "The nonphysical part of a person which is the seat of emotions and character; the soul." },
+            { word: "STRESSFUL", definition: "Causing mental or emotional stress." },
+            { word: "WELL-BEHAVED", definition: "Conducting oneself in an appropriate manner." },
+            { word: "ADDICTION", definition: "The fact or condition of being addicted to a particular substance, thing, or activity." },
+            { word: "BREAKING POINT", definition: "The moment of greatest strain at which someone or something gives way." },
+            { word: "BOTTLE NECK", definition: "A point of congestion or blockage, in particular." },
+            { word: "CONCERNED", definition: "Worried, troubled, or anxious." },
+            { word: "DISRUPT", definition: "Interrupt by causing a disturbance or problem." },
+            { word: "DOUBT", definition: "A feeling of uncertainty or lack of conviction." },
+            { word: "EMBARRASSED", definition: "Feeling or showing embarrassment." },
+            { word: "FAILURE", definition: "Lack of success." },
+            { word: "FRUITFUL", definition: "Producing good or helpful results; productive." },
+            { word: "FULFILLING", definition: "Making someone feel satisfied or happy because of fully developing their character or abilities." },
+            { word: "FURIOUS", definition: "Extremely angry." },
+            { word: "GRATIFYING", definition: "Giving pleasure or satisfaction." },
+            { word: "GRUELLING", definition: "Extremely tiring and demanding." },
+            { word: "GUILTY", definition: "Culpable of or responsible for a specified wrongdoing." },
+            { word: "HAPPINESS", definition: "The state of being happy." }
+        ];
+
+        const GRID_SIZE = 30;
+
+        const SoundManager = {
+            synth: null,
+            init: async () => {
+                await Tone.start();
+                SoundManager.synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                SoundManager.synth.volume.value = -10;
+            },
+            playSelect: () => {
+                if(SoundManager.synth) SoundManager.synth.triggerAttackRelease("C4", "32n");
+            },
+            playFound: () => {
+                if(SoundManager.synth) {
+                    const now = Tone.now();
+                    SoundManager.synth.triggerAttackRelease("E5", "8n", now);
+                    SoundManager.synth.triggerAttackRelease("G5", "8n", now + 0.1);
+                    SoundManager.synth.triggerAttackRelease("C6", "4n", now + 0.2);
+                }
+            },
+            playError: () => {
+                if(SoundManager.synth) SoundManager.synth.triggerAttackRelease("G3", "8n");
+            },
+            playWin: () => {
+                if(SoundManager.synth) {
+                    const now = Tone.now();
+                    ['C4', 'E4', 'G4', 'C5', 'E5', 'G5'].forEach((note, i) => {
+                        SoundManager.synth.triggerAttackRelease(note, "8n", now + i * 0.1);
+                    });
+                }
+            },
+            speakWord: (wordText) => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(wordText);
+                    const voices = window.speechSynthesis.getVoices();
+                    const preferredVoice = voices.find(v => v.lang.includes('en-GB') || v.lang.includes('en-US'));
+                    if (preferredVoice) utterance.voice = preferredVoice;
+                    
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.1;
+                    window.speechSynthesis.speak(utterance);
+                }
+            }
+        };
+
+        const generateGrid = (words) => {
+            let grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(''));
+            let placedWords = [];
+
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [-1, 1],
+                [0, -1], [-1, 0], [-1, -1], [1, -1]
+            ];
+
+            const canPlace = (word, row, col, dir) => {
+                const [dRow, dCol] = dir;
+                for (let i = 0; i < word.length; i++) {
+                    const newRow = row + i * dRow;
+                    const newCol = col + i * dCol;
+                    if (newRow < 0 || newRow >= GRID_SIZE || newCol < 0 || newCol >= GRID_SIZE) return false;
+                    if (grid[newRow][newCol] !== '' && grid[newRow][newCol] !== word[i]) return false;
+                }
+                return true;
+            };
+
+            const placeWord = (word, row, col, dir) => {
+                const [dRow, dCol] = dir;
+                let cells = [];
+                for (let i = 0; i < word.length; i++) {
+                    const newRow = row + i * dRow;
+                    const newCol = col + i * dCol;
+                    grid[newRow][newCol] = word[i];
+                    cells.push(`${newRow}-${newCol}`);
+                }
+                return cells;
+            };
+
+            // Select random words for the grid, ensuring they fit the new size and ignore spaces/hyphens
+            const validWords = words.map(w => ({...w, searchWord: w.word.replace(/[\s-]+/g, '')}))
+                                   .filter(w => w.searchWord.length <= GRID_SIZE);
+            const cleanWords = [...validWords].sort(() => 0.5 - Math.random());
+
+            cleanWords.forEach(wordObj => {
+                let placed = false;
+                let attempts = 0;
+                while (!placed && attempts < 500) {
+                    const dir = directions[Math.floor(Math.random() * directions.length)];
+                    const row = Math.floor(Math.random() * GRID_SIZE);
+                    const col = Math.floor(Math.random() * GRID_SIZE);
+
+                    if (canPlace(wordObj.searchWord, row, col, dir)) {
+                        const cells = placeWord(wordObj.searchWord, row, col, dir);
+                        placedWords.push({ word: wordObj.word, searchWord: wordObj.searchWord, cells, found: false });
+                        placed = true;
+                    }
+                    attempts++;
+                }
+            });
+
+            const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === '') {
+                        grid[r][c] = letters.charAt(Math.floor(Math.random() * letters.length));
+                    }
+                }
+            }
+
+            return { grid, placedWords };
+        };
+
+        const App = () => {
+            const [stage, setStage] = useState(0); // 0: Start, 1: Main Game, 2: Analysis/Hall of Fame
+            const [score, setScore] = useState(0);
+            const [playerNickname, setPlayerNickname] = useState("");
+            const [hasStartedAudio, setHasStartedAudio] = useState(false);
+            const [foundWordsList, setFoundWordsList] = useState([]);
+            
+            // Performance tracking
+            const [startTime, setStartTime] = useState(null);
+            const [sessionLogs, setSessionLogs] = useState([]);
+            
+            // Firebase Auth State
+            const [userAuth, setUserAuth] = useState(null);
+
+            useEffect(() => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.getVoices();
+                }
+
+                const initAuth = async () => {
+                    if (!window.firebaseAuth) return;
+                    try {
+                        if (window.__initial_auth_token) {
+                            await window.signInWithCustomToken(window.firebaseAuth, window.__initial_auth_token);
+                        } else {
+                            await window.signInAnonymously(window.firebaseAuth);
+                        }
+                        setUserAuth(window.firebaseAuth.currentUser);
+                    } catch (e) {
+                        console.error("Auth error:", e);
+                    }
+                };
+                initAuth();
+            }, []);
+
+            const logPerformanceEvent = (taskName, pointsEarned) => {
+                if (!startTime) return;
+                const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsedSeconds / 60);
+                const seconds = elapsedSeconds % 60;
+                const timeString = `${minutes}m ${seconds}s`;
+                
+                setSessionLogs(prev => [...prev, {
+                    id: Date.now(),
+                    task: taskName,
+                    time: timeString,
+                    points: pointsEarned
+                }]);
+            };
+
+            const startAudioAndGame = async () => {
+                if (!hasStartedAudio) {
+                    await SoundManager.init();
+                    setHasStartedAudio(true);
+                }
+                setStage(1);
+                setStartTime(Date.now());
+            };
+
+            const handleWordFound = (wordObj) => {
+                 setFoundWordsList(prev => {
+                     if (!prev.find(w => w.word === wordObj.word)) {
+                         const points = 100;
+                         setScore(s => s + points);
+                         logPerformanceEvent(`Found word: ${wordObj.word}`, points);
+                         return [...prev, wordObj];
+                     }
+                     return prev;
+                 });
+            };
+
+            const handleStorySubmit = (points) => {
+                setScore(s => s + points);
+                logPerformanceEvent("Completed Writing Challenge", points);
+            };
+
+            return (
+                <div className="min-h-screen pooh-theme flex flex-col items-center py-6 px-4 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-32 h-32 bg-[var(--primary)] rounded-full opacity-20 blur-2xl -translate-x-1/2 -translate-y-1/2"></div>
+                    <div className="absolute bottom-0 right-0 w-48 h-48 bg-[var(--accent)] rounded-full opacity-20 blur-2xl translate-x-1/2 translate-y-1/2"></div>
+
+                    <header className="text-center mb-6 z-10 w-full max-w-7xl flex flex-col items-center relative">
+                        <h1 className="text-3xl md:text-4xl font-bold text-[var(--secondary)] mb-2 drop-shadow-md leading-tight" style={{ textShadow: '2px 2px 0px #fff, 4px 4px 0px rgba(0,0,0,0.1)' }}>
+                            <span className="text-xl md:text-2xl text-[#8B4513] block mb-1">Naomi's English Funland presents:</span>
+                            Winnie the Pooh's Word Adventure
+                        </h1>
+                        
+                        {stage > 0 && (
+                            <div className="mt-4 flex flex-wrap justify-center gap-4 w-full">
+                                <div className="bg-white/90 inline-block px-6 py-2 rounded-full border-2 border-[var(--primary)] shadow-sm font-bold text-lg">
+                                    Honey Score: <span className="text-[var(--primary)] text-2xl">{score}</span> 🍯
+                                </div>
+                                <button 
+                                    onClick={() => setStage(stage === 1 ? 2 : 1)}
+                                    className="bg-[var(--accent)] text-white px-6 py-2 rounded-full border-2 border-green-700 shadow-sm font-bold text-lg hover:bg-green-600 transition-colors"
+                                >
+                                    {stage === 1 ? '📊 Analysis & Hall of Fame' : '⬅️ Back to Game'}
+                                </button>
+                            </div>
+                        )}
+                    </header>
+
+                    <main className="w-full max-w-7xl z-10 flex flex-col items-center">
+                        {stage === 0 && <WelcomeScreen onStart={startAudioAndGame} nickname={playerNickname} setNickname={setPlayerNickname} />}
+                        
+                        {stage === 1 && (
+                            <div className="flex flex-col gap-6 w-full animate-fade-in">
+                                <WordSearch 
+                                    updateScore={() => {}} 
+                                    onWordFound={handleWordFound}
+                                />
+                                
+                                <div className="flex flex-col lg:flex-row gap-6 w-full items-stretch">
+                                    <div className="w-full lg:w-1/3 flex">
+                                        <Definitions words={WORD_LIST} foundWords={foundWordsList} />
+                                    </div>
+                                    <div className="w-full lg:w-2/3 flex">
+                                        <WritingChallenge 
+                                            words={WORD_LIST} 
+                                            foundWords={foundWordsList}
+                                            onSuccess={handleStorySubmit} 
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {stage === 2 && (
+                            <AnalysisPage 
+                                score={score} 
+                                sessionLogs={sessionLogs} 
+                                userAuth={userAuth} 
+                                playerNickname={playerNickname}
+                            />
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const WelcomeScreen = ({ onStart, nickname, setNickname }) => (
+            <div className="bg-[var(--bg-card)] p-8 rounded-3xl shadow-xl border-4 border-[var(--primary)] text-center max-w-lg mt-10">
+                <div className="text-6xl mb-4">🐻🍯🌳</div>
+                <h3 className="text-2xl font-bold mb-4">Oh, bother...</h3>
+                <p className="text-lg mb-6 leading-relaxed">
+                    Pooh bear has lost some very important words in the Hundred Acre Wood. 
+                    Help him find them, learn what they mean, and then write a lovely story!
+                </p>
+                <div className="mb-6">
+                    <input 
+                        type="text" 
+                        placeholder="Enter your nickname..." 
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-[var(--primary)] focus:outline-none focus:ring-4 focus:ring-orange-200 text-center text-lg font-bold text-[#4A3C31]"
+                        maxLength={20}
+                    />
+                </div>
+                <button 
+                    onClick={onStart} 
+                    disabled={!nickname.trim()}
+                    className="btn-pooh text-xl px-8 py-3 rounded-full font-bold uppercase tracking-wider disabled:opacity-50"
+                >
+                    Let's Go!
+                </button>
+            </div>
+        );
+
+        const WordSearch = ({ updateScore, onWordFound }) => {
+            const [gridData, setGridData] = useState({ grid: [], placedWords: [] });
+            const [selectedCells, setSelectedCells] = useState([]);
+            const [isSelecting, setIsSelecting] = useState(false);
+
+            useEffect(() => {
+                setGridData(generateGrid(WORD_LIST));
+            }, []);
+
+            const handlePointerDown = (r, c) => {
+                setIsSelecting(true);
+                setSelectedCells([`${r}-${c}`]);
+                SoundManager.playSelect();
+            };
+
+            const handlePointerEnter = (r, c) => {
+                if (isSelecting) {
+                    const start = selectedCells[0].split('-');
+                    const sr = parseInt(start[0]);
+                    const sc = parseInt(start[1]);
+                    
+                    let newSelection = [];
+                    const dr = Math.sign(r - sr);
+                    const dc = Math.sign(c - sc);
+                    
+                    if (dr === 0 || dc === 0 || Math.abs(r - sr) === Math.abs(c - sc)) {
+                        let currR = sr;
+                        let currC = sc;
+                        const len = Math.max(Math.abs(r - sr), Math.abs(c - sc));
+                        
+                        for (let i = 0; i <= len; i++) {
+                            newSelection.push(`${currR}-${currC}`);
+                            currR += dr;
+                            currC += dc;
+                        }
+                        
+                        if (newSelection.join(',') !== selectedCells.join(',')) {
+                           SoundManager.playSelect();
+                           setSelectedCells(newSelection);
+                        }
+                    }
+                }
+            };
+
+            const handlePointerUp = () => {
+                setIsSelecting(false);
+                checkSelection();
+            };
+
+            const checkSelection = () => {
+                if (selectedCells.length < 2) {
+                    setSelectedCells([]);
+                    return;
+                }
+
+                const selectedString = selectedCells.map(id => {
+                    const [r, c] = id.split('-');
+                    return gridData.grid[r][c];
+                }).join('');
+                
+                const reverseSelectedString = selectedString.split('').reverse().join('');
+
+                let foundWordObj = gridData.placedWords.find(w => 
+                    !w.found && (w.searchWord === selectedString || w.searchWord === reverseSelectedString)
+                );
+
+                if (foundWordObj) {
+                    SoundManager.playFound();
+                    SoundManager.speakWord(foundWordObj.word); 
+                    onWordFound(foundWordObj);
+                    
+                    setGridData(prev => ({
+                        ...prev,
+                        placedWords: prev.placedWords.map(w => 
+                            w.word === foundWordObj.word ? { ...w, found: true, foundCells: selectedCells } : w
+                        )
+                    }));
+                } else {
+                    SoundManager.playError();
+                }
+                setSelectedCells([]);
+            };
+
+            return (
+                <div className="flex flex-col md:flex-row gap-6 w-full bg-[var(--bg-card)] p-4 rounded-3xl shadow-xl border-4 border-[var(--primary)]">
+                    <div className="w-full md:w-1/4 flex flex-col items-center">
+                        <div className="flex items-center gap-2 mb-4 shrink-0">
+                            <span className="text-3xl">🔎</span>
+                            <h3 className="text-xl font-bold">Word Hunt</h3>
+                        </div>
+                        <div className="bg-white/80 p-3 rounded-2xl border-2 border-[var(--accent)] w-full shadow-inner flex-1 max-h-[400px] overflow-y-auto custom-scrollbar">
+                            <ul className="flex flex-wrap gap-1 justify-center">
+                                {gridData.placedWords.map(w => (
+                                    <li key={w.word} className={`px-2 py-1 rounded-full text-xs font-bold transition-all ${w.found ? 'bg-[var(--accent)] text-white shadow-md' : 'bg-gray-200 text-gray-500'}`}>
+                                        {w.word}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="w-full md:w-3/4 flex justify-center items-center">
+                        <div 
+                            className="bg-white p-1 sm:p-2 rounded-xl border-4 border-[#8B4513] shadow-2xl touch-none w-full max-w-[600px] aspect-square flex items-center justify-center"
+                            onPointerUp={handlePointerUp}
+                            onPointerLeave={handlePointerUp}
+                        >
+                            <div 
+                                className="grid gap-[1px] w-full h-full"
+                                style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${GRID_SIZE}, minmax(0, 1fr))` }}
+                            >
+                                {gridData.grid.map((row, r) => 
+                                    row.map((letter, c) => {
+                                        const cellId = `${r}-${c}`;
+                                        const isSelected = selectedCells.includes(cellId);
+                                        const isFound = gridData.placedWords.some(w => w.found && w.foundCells && w.foundCells.includes(cellId));
+
+                                        return (
+                                            <div 
+                                                key={cellId}
+                                                className={`w-full h-full flex items-center justify-center text-[10px] sm:text-[11px] md:text-sm font-bold rounded-sm cursor-pointer select-none grid-cell
+                                                    ${isSelected ? 'selected' : ''}
+                                                    ${isFound ? 'found' : 'bg-[#FFF8DC] text-[#5C4033]'}
+                                                `}
+                                                onPointerDown={() => handlePointerDown(r, c)}
+                                                onPointerEnter={() => handlePointerEnter(r, c)}
+                                            >
+                                                {letter}
+                                            </div>
+                                        )
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Definitions = ({ words, foundWords }) => {
+            return (
+                <div className="bg-[var(--bg-card)] p-4 rounded-3xl shadow-xl border-4 border-[var(--primary)] w-full h-full flex flex-col">
+                    <div className="flex items-center gap-3 mb-3 border-b-4 border-dotted border-[var(--primary)] pb-3 shrink-0">
+                        <span className="text-3xl">🦉</span>
+                        <div>
+                            <h3 className="text-xl font-bold">Owl's Wisdom</h3>
+                            <p className="text-xs italic">Find words to reveal meaning!</p>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-2 max-h-[500px]">
+                        {words.map(w => {
+                            const isFound = foundWords.some(fw => fw.word === w.word);
+                            return (
+                                <div key={w.word} className={`p-3 rounded-xl shadow-sm border transition-all duration-300 ${isFound ? 'bg-white border-[#E5E7EB]' : 'bg-gray-100 border-gray-200 opacity-50'}`}>
+                                    <h4 className="font-bold text-[var(--secondary)] text-sm mb-1 flex justify-between items-center">
+                                        {isFound ? w.word : "???"}
+                                        {isFound && (
+                                            <button 
+                                                onClick={() => SoundManager.speakWord(w.word)}
+                                                className="text-[10px] bg-blue-100 text-blue-800 px-1 py-0.5 rounded hover:bg-blue-200 transition-colors"
+                                                title="Listen to pronunciation"
+                                            >
+                                                🔊
+                                            </button>
+                                        )}
+                                    </h4>
+                                    <p className={`text-xs ${isFound ? 'text-gray-700' : 'text-gray-400 italic blur-[2px] select-none'}`}>
+                                        {isFound ? w.definition : w.definition.replace(/[a-zA-Z]/g, 'x')}
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const WritingChallenge = ({ words, foundWords, onSuccess }) => {
+            const [text, setText] = useState("");
+            const [feedback, setFeedback] = useState(null);
+            const requiredWordCount = 8; // Updated requirement
+
+            const validateText = () => {
+                SoundManager.playSelect();
+                
+                const usedWords = words.filter(w => {
+                    const regex = new RegExp(`\\b${w.word.toLowerCase().replace(/\s+/g, '[\\s-]')}\\b`, 'i');
+                    return regex.test(text);
+                });
+
+                if (usedWords.length < requiredWordCount) {
+                    setFeedback({
+                        type: 'error',
+                        message: `Oh bother! You've only used ${usedWords.length} out of ${requiredWordCount} required words.`,
+                        accuracy: 0,
+                        errors: []
+                    });
+                    SoundManager.playError();
+                    return;
+                }
+
+                let foundErrors = [];
+                const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+
+                sentences.forEach(sentence => {
+                    let s = sentence.trim();
+                    if (!s) return;
+
+                    if (s[0] !== s[0].toUpperCase()) {
+                        foundErrors.push({ message: "Sentences must start with a capital letter.", snippet: s.substring(0, 15) + "..." });
+                    }
+                    
+                    if (/\s+[.!?]$/.test(s)) {
+                        foundErrors.push({ message: "Remove extra spaces before punctuation.", snippet: "..." + s.slice(-10) });
+                    }
+
+                    const aAnRegex = /\b(a)\s+([aeiouAEIOU][a-zA-Z]*)\b/g;
+                    let match;
+                    while ((match = aAnRegex.exec(s)) !== null) {
+                        if(!['union', 'university', 'user', 'one', 'once'].includes(match[2].toLowerCase())) {
+                            foundErrors.push({ message: "Use 'an' before words starting with a vowel sound.", snippet: match[0] });
+                        }
+                    }
+
+                    if (/\s{2,}/.test(s)) {
+                        foundErrors.push({ message: "Remove extra spaces between words.", snippet: s.match(/.{0,10}\s{2,}.{0,10}/)[0].trim() });
+                    }
+                });
+
+                const wordCount = text.trim().split(/\s+/).length;
+                if (wordCount < 40) {
+                     foundErrors.push({ message: "Your paragraph needs to be longer. Try writing at least 40 words!", snippet: `Current words: ${wordCount}` });
+                }
+
+                // Calculate Grammar Accuracy %
+                const penaltyPerError = 10;
+                let calculatedAccuracy = Math.max(0, 100 - (foundErrors.length * penaltyPerError));
+
+                if (foundErrors.length > 0 || calculatedAccuracy < 100) {
+                    setFeedback({
+                        type: 'error',
+                        message: "Almost there! Please correct these grammar errors immediately to proceed.",
+                        accuracy: calculatedAccuracy,
+                        errors: foundErrors
+                    });
+                    SoundManager.playError();
+                } else {
+                    setFeedback({
+                        type: 'success',
+                        message: "Hooray! A wonderful, grammatically correct story! Pooh is very proud.",
+                        accuracy: 100,
+                        errors: []
+                    });
+                    SoundManager.playWin();
+                    onSuccess(1000); // Higher points for story completion
+                }
+            };
+
+            const usedWordsCount = words.filter(w => new RegExp(`\\b${w.word.toLowerCase().replace(/\s+/g, '[\\s-]')}\\b`, 'i').test(text)).length;
+
+            return (
+                <div className="bg-[var(--bg-card)] p-4 rounded-3xl shadow-xl border-4 border-[var(--primary)] w-full h-full flex flex-col">
+                    <div className="flex items-center gap-3 mb-3 shrink-0">
+                        <span className="text-3xl">👦</span>
+                        <div>
+                            <h3 className="text-xl font-bold">Christopher Robin's Challenge</h3>
+                            <p className="text-xs">Write a paragraph using at least <strong className="text-[var(--secondary)] text-sm">{requiredWordCount}</strong> vocabulary words. You must achieve <strong className="text-[var(--secondary)]">100% Grammar Accuracy</strong> to pass!</p>
+                        </div>
+                    </div>
+
+                    <div className="mb-3 bg-white/60 p-2 rounded-lg border border-[var(--primary)] shrink-0">
+                         <p className="text-xs font-bold mb-2 flex justify-between">
+                             <span>Words Used:</span> 
+                             <span className={usedWordsCount >= requiredWordCount ? 'text-green-600' : 'text-red-500'}>
+                                {usedWordsCount} / {requiredWordCount}
+                             </span>
+                         </p>
+                         <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar pr-1">
+                             {words.map(w => {
+                                 const isUsed = new RegExp(`\\b${w.word.toLowerCase().replace(/\s+/g, '[\\s-]')}\\b`, 'i').test(text);
+                                 const isFound = foundWords.some(fw => fw.word === w.word);
+                                 const displayWord = (isFound || isUsed) ? w.word : "???";
+                                 
+                                 return (
+                                    <span key={w.word} className={`text-[9px] px-1.5 py-0.5 rounded-full border transition-colors
+                                        ${isUsed ? 'bg-green-200 border-green-500 text-green-800' : 
+                                          isFound ? 'bg-blue-100 border-blue-300 text-blue-800' : 
+                                          'bg-gray-100 border-gray-300 text-gray-400'}`}>
+                                        {displayWord}
+                                    </span>
+                                 )
+                             })}
+                         </div>
+                    </div>
+
+                    <textarea
+                        value={text}
+                        onChange={(e) => {
+                            setText(e.target.value);
+                            if(feedback?.type === 'success') setFeedback(null); 
+                        }}
+                        placeholder="Once upon a time in the Hundred Acre Wood..."
+                        className={`w-full flex-1 min-h-[150px] p-3 rounded-xl border-2 focus:outline-none focus:ring-4 resize-none font-sans text-sm shadow-inner bg-white mb-3 transition-colors
+                            ${feedback?.type === 'error' ? 'border-red-400 focus:ring-red-200' : 'border-[var(--primary)] focus:ring-[var(--primary)]/50'}`}
+                    />
+
+                    {feedback && (
+                        <div className={`p-3 rounded-xl mb-3 border-2 shrink-0 ${feedback.type === 'error' ? 'bg-red-50 border-red-300 text-red-800' : 'bg-green-50 border-green-300 text-green-800'}`}>
+                            <div className="flex justify-between items-center border-b border-current pb-2 mb-2">
+                                <p className="font-bold text-sm">{feedback.message}</p>
+                                <div className="text-right">
+                                    <span className="text-xs uppercase tracking-wider opacity-80">Accuracy</span>
+                                    <div className="text-xl font-black">{feedback.accuracy}%</div>
+                                </div>
+                            </div>
+                            
+                            {feedback.errors && feedback.errors.length > 0 && (
+                                <ul className="list-disc pl-5 text-xs space-y-1">
+                                    {feedback.errors.map((err, i) => (
+                                        <li key={i}>
+                                            <span className="font-semibold">{err.message}</span>
+                                            {err.snippet && <span className="block opacity-70 italic mt-0.5">Near: "{err.snippet}"</span>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="text-center mt-auto shrink-0">
+                        <button 
+                            onClick={validateText}
+                            className={`btn-pooh text-base px-6 py-2 rounded-full font-bold w-full`}
+                            disabled={feedback?.type === 'success'}
+                        >
+                            {feedback?.type === 'success' ? '✨ Perfect Grammar! Passed! ✨' : 'Check Grammar & Submit'}
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const AnalysisPage = ({ score, sessionLogs, userAuth, playerNickname }) => {
+            const [leaderboard, setLeaderboard] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [nickname, setNickname] = useState(playerNickname || "");
+            const [hasSubmitted, setHasSubmitted] = useState(false);
+            const [errorMsg, setErrorMsg] = useState("");
+
+            useEffect(() => {
+                if (!window.firebaseDb || !userAuth) {
+                    setLoading(false);
+                    return;
+                }
+
+                try {
+                    const lbRef = window.collection(window.firebaseDb, 'artifacts', window.appId, 'public', 'data', 'pooh_leaderboard');
+                    
+                    const unsubscribe = window.onSnapshot(lbRef, (snapshot) => {
+                        let scores = [];
+                        snapshot.forEach(doc => {
+                            scores.push({ id: doc.id, ...doc.data() });
+                        });
+                        scores.sort((a, b) => b.score - a.score);
+                        setLeaderboard(scores);
+                        setLoading(false);
+                    }, (err) => {
+                        console.error("Error fetching leaderboard:", err);
+                        setLoading(false);
+                    });
+
+                    return () => unsubscribe();
+                } catch (e) {
+                    console.error("Firestore error:", e);
+                    setLoading(false);
+                }
+            }, [userAuth]);
+
+            const submitScore = async () => {
+                if (!nickname.trim()) {
+                    setErrorMsg("Please enter a nickname!");
+                    return;
+                }
+                if (!window.firebaseDb || !userAuth) {
+                    setErrorMsg("Database connection error.");
+                    return;
+                }
+
+                try {
+                    const lbRef = window.collection(window.firebaseDb, 'artifacts', window.appId, 'public', 'data', 'pooh_leaderboard');
+                    await window.addDoc(lbRef, {
+                        nickname: nickname.trim(),
+                        score: score,
+                        date: new Date().toISOString()
+                    });
+                    setHasSubmitted(true);
+                } catch (e) {
+                    console.error("Error adding document: ", e);
+                    setErrorMsg("Failed to submit score.");
+                }
+            };
+
+            const downloadCSV = () => {
+                if (leaderboard.length === 0) return;
+                const headers = ["Rank", "Nickname", "Score", "Date"];
+                const csvRows = [headers.join(",")];
+                
+                leaderboard.forEach((entry, index) => {
+                    const dateStr = entry.date ? new Date(entry.date).toLocaleString() : "N/A";
+                    const name = `"${entry.nickname.replace(/"/g, '""')}"`;
+                    csvRows.push(`${index + 1},${name},${entry.score},"${dateStr}"`);
+                });
+
+                const csvData = new Blob([csvRows.join("\n")], { type: 'text/csv' });
+                const csvUrl = URL.createObjectURL(csvData);
+                const link = document.createElement('a');
+                link.href = csvUrl;
+                link.download = 'students_performance.csv';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            return (
+                <div className="w-full max-w-5xl flex flex-col md:flex-row gap-6 animate-fade-in">
+                    {/* Performance Logs Section */}
+                    <div className="flex-1 bg-[var(--bg-card)] p-6 rounded-3xl shadow-xl border-4 border-[var(--accent)] h-[600px] flex flex-col">
+                        <div className="flex items-center gap-3 mb-4 shrink-0 border-b-4 border-dotted border-[var(--accent)] pb-3">
+                            <span className="text-3xl">⏱️</span>
+                            <h3 className="text-2xl font-bold">Session Performance</h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                            {sessionLogs.length === 0 ? (
+                                <p className="text-center text-gray-500 italic mt-10">No activities logged yet. Start playing to see your performance!</p>
+                            ) : (
+                                sessionLogs.map(log => (
+                                    <div key={log.id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-sm text-[#4A3C31]">{log.task}</p>
+                                            <p className="text-xs text-gray-500">Time taken: {log.time}</p>
+                                        </div>
+                                        <div className="text-[var(--primary)] font-black text-lg bg-orange-50 px-3 py-1 rounded-lg">
+                                            +{log.points}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Hall of Fame Section */}
+                    <div className="flex-1 bg-[var(--bg-card)] p-6 rounded-3xl shadow-xl border-4 border-[var(--primary)] h-[600px] flex flex-col">
+                        <div className="flex justify-between items-center mb-4 shrink-0 border-b-4 border-dotted border-[var(--primary)] pb-3">
+                            <div className="flex items-center gap-3">
+                                <span className="text-3xl">🏆</span>
+                                <h3 className="text-2xl font-bold">Global Hall of Fame</h3>
+                            </div>
+                            <button 
+                                onClick={downloadCSV}
+                                className="bg-green-600 text-white text-xs px-3 py-2 rounded-lg font-bold hover:bg-green-700 transition-colors shadow flex items-center gap-1"
+                                title="Download Teacher Report"
+                            >
+                                📥 Download CSV
+                            </button>
+                        </div>
+
+                        {!hasSubmitted && score > 0 && (
+                            <div className="bg-orange-100 p-4 rounded-xl border-2 border-orange-300 mb-4 shrink-0">
+                                <h4 className="font-bold text-sm mb-2">You have a high score of {score}!</h4>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Enter Nickname" 
+                                        maxLength={15}
+                                        value={nickname}
+                                        onChange={(e) => {setNickname(e.target.value); setErrorMsg("");}}
+                                        className="flex-1 px-3 py-2 rounded-lg border-2 border-[var(--primary)] focus:outline-none"
+                                    />
+                                    <button onClick={submitScore} className="btn-pooh px-4 py-2 rounded-lg font-bold text-sm">
+                                        Submit
+                                    </button>
+                                </div>
+                                {errorMsg && <p className="text-red-500 text-xs mt-1">{errorMsg}</p>}
+                            </div>
+                        )}
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                            {loading ? (
+                                <p className="text-center text-gray-500 mt-10">Loading scores...</p>
+                            ) : leaderboard.length === 0 ? (
+                                <p className="text-center text-gray-500 mt-10">No scores yet. Be the first!</p>
+                            ) : (
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b-2 border-gray-300 text-sm">
+                                            <th className="py-2 px-2">Rank</th>
+                                            <th className="py-2 px-2">Name</th>
+                                            <th className="py-2 px-2 text-right">Score</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {leaderboard.slice(0, 50).map((entry, index) => (
+                                            <tr key={entry.id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
+                                                <td className="py-3 px-2 font-bold text-gray-500">
+                                                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                                                </td>
+                                                <td className="py-3 px-2 font-semibold truncate max-w-[120px]">{entry.nickname}</td>
+                                                <td className="py-3 px-2 text-right font-black text-[var(--primary)]">{entry.score}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
